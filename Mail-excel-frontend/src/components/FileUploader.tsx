@@ -57,7 +57,8 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onU
     formData.append('file', file);
 
     try {
-      const response = await fetch('https://mail-through-excel.vercel.app/upload-excel/', {
+      // const response = await fetch('https://mail-through-excel.vercel.app/upload-excel/', {
+      const response = await fetch('http://127.0.0.1:8000/upload-excel/', {
         method: 'POST',
         body: formData,
       });

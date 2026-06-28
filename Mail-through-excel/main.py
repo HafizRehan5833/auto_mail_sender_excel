@@ -1,9 +1,12 @@
+from random import random
+
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import time
 
 from email_utils.email import send_email
-from tooling.tools import extract_emails_from_excel  # returns email, name, company
+from tooling.tools import extract_emails_from_excel
 
 app = FastAPI(
     title="Excel Email Sender API",
@@ -186,61 +189,98 @@ async def root():
     return {
         "message": "📧 Welcome to JR Agency’s Email Sender API — offering website development and automation solutions. Upload your Excel file at /upload-excel/."
     }
-
-
 @app.post("/upload-excel/")
 async def upload_excel(file: UploadFile = File(...)):
     try:
+        # Read uploaded file
         contents = await file.read()
+
         if not contents:
             raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail="File too large")
 
-        result = extract_emails_from_excel(file_bytes=contents, filename=file.filename)
+        # Extract contacts
+        result = extract_emails_from_excel(
+            file_bytes=contents,
+            filename=file.filename
+        )
+
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
 
         contacts = result.get("contacts", [])
+
         if not contacts:
             raise HTTPException(status_code=400, detail="No valid contacts found")
 
-        sent_emails, failed_emails = [], []
+        sent_emails = []
+        failed_emails = []
 
         print(f"\n📤 Starting to send {len(contacts)} emails...\n")
 
+        # Loop through all contacts
         for i, contact in enumerate(contacts, start=1):
+
             email = contact.get("email")
             name = contact.get("name", "Friend")
             company = contact.get("company", "your company")
 
             if not email:
-                failed_emails.append({"email": None, "error": "Missing email"})
+                failed_emails.append({
+                    "email": None,
+                    "error": "Missing email"
+                })
                 continue
 
             subject = f"{company} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀"
+
             body = generate_email_body(name, company)
 
             try:
-                print(f"📧 [{i}/{len(contacts)}] Sending to: {email} ({company})...")
-                send_email(email, subject, body)
-                print(f"✅ Sent successfully to {email}\n")
-                sent_emails.append(email)
-            except Exception as e:
-                print(f"❌ Failed to send to {email}: {str(e)}\n")
-                failed_emails.append({"email": email, "error": str(e)})
+                print(f"📧 [{i}/{len(contacts)}] Sending to {email}")
 
-        print(f"\n✅ All done! Total sent: {len(sent_emails)}, Failed: {len(failed_emails)}\n")
+                send_email(
+                    email,
+                    subject,
+                    body
+                )
+
+                print(f"✅ Successfully sent to {email}")
+
+                sent_emails.append(email)
+
+                # Wait before sending next email
+                time.sleep(random.randint(30, 50))
+
+            except Exception as e:
+                print(f"❌ Failed to send to {email}: {e}")
+
+                failed_emails.append({
+                    "email": email,
+                    "error": str(e)
+                })
+
+        print(
+            f"\n✅ Completed!\n"
+            f"Sent: {len(sent_emails)}\n"
+            f"Failed: {len(failed_emails)}"
+        )
 
         return {
             "status": "completed",
             "total_contacts": len(contacts),
             "emails_sent": len(sent_emails),
             "failed_count": len(failed_emails),
-            "failed_details": failed_emails
+            "failed_details": failed_emails,
         }
 
     except HTTPException:
         raise
+
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Server error: {str(e)}"
+        )
