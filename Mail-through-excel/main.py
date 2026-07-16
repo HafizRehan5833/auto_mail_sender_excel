@@ -1,4 +1,4 @@
-from random import random
+import random
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,160 +28,255 @@ MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 WHATSAPP_NUMBER = "923019201234"
 
 
-def generate_email_body(name: str, company: str) -> str:
+def generate_email_body(name: str, company: str, website: str = None) -> str:
     """
     JR Agency — Automation & Website Development Solutions
     Personalized email template for each client.
     """
     first_name = name.split()[0].capitalize() if name else "there"
     company_name = company or "your company"
-
-    whatsapp_link = (
-        f"https://wa.me/{WHATSAPP_NUMBER}?text=Hi%20JR%20Agency%2C%20"
-        f"I%27m%20from%20{company_name.replace(' ', '%20')}%20and%20would%20like%20to%20discuss%20automation%20or%20website%20solutions."
-    )
+    website_url = website or "your site"
 
     return f"""
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
-  <meta charset="UTF-8">
-  <title>{company_name} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀</title>
-  <style>
-    body {{
-      font-family: 'Poppins', Arial, sans-serif;
-      background: #f8f9fb;
-      color: #1e293b;
-      margin: 0;
-      padding: 0;
-    }}
-    .container {{
-      max-width: 700px;
-      margin: 40px auto;
-      background: #fff;
-      border-radius: 16px;
-      box-shadow: 0 6px 30px rgba(0, 0, 0, 0.07);
-      overflow: hidden;
-    }}
-    .header {{
-      background: linear-gradient(135deg, #111827, #ef4444);
-      color: white;
-      padding: 45px 30px;
-      text-align: center;
-    }}
-    .header h1 {{
-      font-size: 26px;
-      margin: 0;
-    }}
-    .header p {{
-      margin-top: 8px;
-      font-size: 15px;
-      opacity: 0.9;
-    }}
-    .body {{
-      padding: 35px;
-      line-height: 1.7;
-    }}
-    .body p {{
-      margin-bottom: 18px;
-      font-size: 15px;
-      color: #334155;
-    }}
-    .highlight {{
-      background: #fef2f2;
-      border-left: 4px solid #ef4444;
-      padding: 12px 16px;
-      border-radius: 8px;
-      margin: 20px 0;
-    }}
-    .cta {{
-      text-align: center;
-      margin-top: 30px;
-    }}
-    .cta a {{
-      display: inline-block;
-      margin: 8px;
-      padding: 14px 26px;
-      border-radius: 40px;
-      text-decoration: none;
-      font-weight: 600;
-      transition: all 0.3s ease;
-    }}
-    .btn-primary {{
-      background: linear-gradient(90deg, #111827, #ef4444);
-      color: white;
-      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
-    }}
-    .btn-primary:hover {{
-      opacity: 0.85;
-    }}
-    .btn-outline {{
-      border: 2px solid #ef4444;
-      color: #ef4444;
-      background: white;
-    }}
-    .btn-outline:hover {{
-      background: #ef4444;
-      color: white;
-    }}
-    .footer {{
-      background: #111827;
-      color: #d1d5db;
-      text-align: center;
-      padding: 20px;
-      font-size: 13px;
-    }}
-    .footer a {{
-      color: #ef4444;
-      text-decoration: none;
-    }}
-    .footer a:hover {{
-      text-decoration: underline;
-    }}
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Try this on your own site — takes 30 seconds</title>
+<style>
+  body, table, td {{ -ms-text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }}
+  table, td {{ mso-table-lspace: 0pt; mso-table-rspace: 0pt; }}
+  body {{ margin: 0; padding: 0; width: 100% !important; height: 100% !important; }}
+  @media only screen and (max-width: 600px) {{
+    .email-container {{ width: 100% !important; }}
+    .mobile-padding {{ padding-left: 22px !important; padding-right: 22px !important; }}
+    .btn-cell {{ display: block !important; width: 100% !important; padding: 0 0 10px 0 !important; }}
+    .hero-title {{ font-size: 22px !important; }}
+  }}
+</style>
 </head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>{company_name} — Transforming Ideas into Intelligent Solutions</h1>
-      <p>Helping {company_name} automate, accelerate, and attract more clients online.</p>
-    </div>
+<body style="margin:0; padding:0; background-color:#eceae6;">
 
-    <div class="body">
-      <p>Hi {first_name},</p>
-      <p>Every business faces time-consuming tasks that hold back growth and focus.</p>
-
-      <div class="highlight">
-        <strong>Imagine if those tasks could run automatically — while you focus on what really matters.</strong>
-      </div>
-
-      <p>At <strong>JR Agency</strong>, we craft intelligent <strong>automation systems</strong> and high-performing <strong>websites</strong> designed to help {company_name} scale efficiently and attract more clients.</p>
-
-      <p><strong>Here’s what our clients have achieved:</strong></p>
-      <ul>
-        <li>⚡ Reduced manual workload by 9+ hours/day using automation tools.</li>
-        <li>🌐 Built conversion-driven websites that attract clients 24/7.</li>
-        <li>📈 Scaled operations without expanding their teams.</li>
-      </ul>
-
-      <div class="highlight">
-        <strong>{company_name} could save <span style="color:#ef4444;">40+ hours each month</span> and attract more clients automatically 🚀</strong>
-      </div>
-
-      <div class="cta">
-        <a href="{whatsapp_link}" class="btn-primary" target="_blank">💬 Discuss Your Project</a>
-        <a href="https://www.jragency.tech" class="btn-outline" target="_blank">🌍 Visit Our Website</a>
-      </div>
-    </div>
-
-    <div class="footer">
-      <p>JR Agency — Where automation meets creativity. Building systems that grow your business while you focus on your vision.</p>
-      <a href="https://www.jragency.tech" target="_blank">www.jragency.tech</a>
-    </div>
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+    Three 10-second checks on {website_url} — you might not like the answers.
   </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eceae6;">
+    <tr>
+      <td align="center" style="padding: 32px 14px;">
+
+        <table role="presentation" class="email-container" width="600" cellpadding="0" cellspacing="0" style="width:600px; max-width:600px; background-color:#ffffff; border:1px solid #dcd9d3;">
+
+          <!-- Signal bar -->
+          <tr>
+            <td style="height:4px; background-color:#e8a33d; line-height:4px; font-size:1px;">&nbsp;</td>
+          </tr>
+
+          <!-- Header -->
+          <tr>
+            <td class="mobile-padding" style="padding: 26px 40px 20px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-family: Menlo, Consolas, 'Courier New', monospace; font-size:13px; font-weight:700; color:#14171c; letter-spacing:0.5px;">
+                    JR&nbsp;AI&nbsp;AGENCY
+                  </td>
+                  <td align="right" style="font-family: Menlo, Consolas, 'Courier New', monospace; font-size:11px; color:#9a9488; letter-spacing:0.3px;">
+                    two founders · no sales team
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Hero -->
+          <tr>
+            <td class="mobile-padding" style="padding: 4px 40px 0 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin:0 0 10px 0; font-family: Menlo, Consolas, 'Courier New', monospace; font-size:11px; font-weight:700; color:#e8a33d; letter-spacing:1.2px; text-transform:uppercase;">
+                A 30-second check before the pitch
+              </p>
+              <p class="hero-title" style="margin:0; font-size:25px; line-height:1.32; font-weight:800; color:#14171c; letter-spacing:-0.3px;">
+                Don't take my word for it — open {website_url} on your phone right now.
+              </p>
+              <p style="margin:14px 0 0 0; font-size:15px; line-height:1.65; color:#5b6472;">
+                Not on wifi, on data, the way most visitors actually find you. Three things to try, thirty seconds each:
+              </p>
+            </td>
+          </tr>
+
+          <!-- Checklist: signature element -->
+          <tr>
+            <td class="mobile-padding" style="padding: 22px 40px 4px 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="padding:14px 0; border-top:1px solid #eceae6;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="22" valign="top" style="padding-right:12px;">
+                          <div style="width:16px; height:16px; border:2px solid #14171c;"></div>
+                        </td>
+                        <td valign="top">
+                          <p style="margin:0; font-size:14.5px; line-height:1.55; color:#3d3a35;"><strong style="color:#14171c;">Time the load.</strong> Count the seconds until it's actually usable, not just a blank screen or a spinner.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 0; border-top:1px solid #eceae6;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="22" valign="top" style="padding-right:12px;">
+                          <div style="width:16px; height:16px; border:2px solid #14171c;"></div>
+                        </td>
+                        <td valign="top">
+                          <p style="margin:0; font-size:14.5px; line-height:1.55; color:#3d3a35;"><strong style="color:#14171c;">Tap "Contact" or "Book."</strong> See if it actually goes anywhere, or just sits there.</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:14px 0; border-top:1px solid #eceae6; border-bottom:1px solid #eceae6;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td width="22" valign="top" style="padding-right:12px;">
+                          <div style="width:16px; height:16px; border:2px solid #14171c;"></div>
+                        </td>
+                        <td valign="top">
+                          <p style="margin:0; font-size:14.5px; line-height:1.55; color:#3d3a35;"><strong style="color:#14171c;">Send a test message.</strong> Does anything confirm it went through, or are you just hoping?</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:14px 0 0 0; font-size:13px; color:#8a8378;">
+                If any of those made you pause — that's the exact moment a visitor becomes a lost customer instead of a lead.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="mobile-padding" style="padding: 22px 40px 4px 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
+                Hi {first_name},
+              </p>
+              <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
+                I'm Rehan from JR AI Agency. We help small businesses fix one core problem:
+              </p>
+              <p style="margin:0 0 4px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
+                Reply and tell me which of the three you actually noticed — I'll send back exactly what I'd fix first and roughly what it'd take, no pitch attached.
+              </p>
+            </td>
+          </tr>
+
+          <!-- CTA -->
+          <tr>
+            <td class="mobile-padding" style="padding: 24px 40px 6px 40px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                <tr>
+                  <td class="btn-cell" style="padding-right:10px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center" bgcolor="#14171c" style="border-radius:2px;">
+                          <a href="mailto:hello@jragency.tech?subject=Re%3A%20{company_name}%20-%20the%20site%20check&body=Hi%20Rehan%2C%0A%0AHere%27s%20what%20I%20noticed%20on%20our%20site%3A%0A%0A-%20"
+                             style="display:inline-block; padding:13px 24px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:14px; font-weight:700; color:#ffffff; text-decoration:none; border-radius:2px;">
+                            Reply with what I noticed
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td class="btn-cell">
+                    <table role="presentation" cellpadding="0" cellspacing="0">
+                      <tr>
+                        <td align="center" bgcolor="#ffffff" style="border-radius:2px; border:1px solid #14171c;">
+                          <a href="https://wa.me/923019201234?text=Hi%20Rehan%2C%20I%27m%20from%20{company_name}%20-%20here%27s%20what%20I%20noticed%20on%20our%20site."
+                             style="display:inline-block; padding:13px 24px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:14px; font-weight:700; color:#14171c; text-decoration:none; border-radius:2px;">
+                            Or WhatsApp me
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Sign-off -->
+          <tr>
+            <td class="mobile-padding" style="padding: 22px 40px 8px 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin:0; font-size:14px; line-height:1.7; color:#6b665e;">
+                Either way, hope things are going well over there.<br><br>
+                — <span style="color:#14171c; font-weight:700;">Hafiz Rehan</span><br>
+                Co-Founder, JR AI Agency<br>
+                <a href="https://hafizmrehanportfolio.vercel.app/" style="color:#14171c; text-decoration:underline;">Portfolio</a> &nbsp;·&nbsp;
+                <a href="https://linkedin.com/in/rehanai" style="color:#14171c; text-decoration:underline;">LinkedIn</a>
+              </p>
+            </td>
+          </tr>
+
+          <!-- Divider -->
+          <tr>
+            <td class="mobile-padding" style="padding: 18px 40px 0 40px;">
+              <div style="height:1px; background-color:#eceae6;"></div>
+            </td>
+          </tr>
+
+          <!-- P.S. services -->
+          <tr>
+            <td class="mobile-padding" style="padding: 20px 40px 6px 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin:0 0 14px 0; font-size:13px; line-height:1.6; color:#6b665e;">
+                <strong style="color:#14171c;">P.S.</strong> — what a rebuild usually includes:
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td width="50%" valign="top" style="padding:0 10px 12px 0; border-left:2px solid #e8a33d;">
+                    <p style="margin:0 0 2px 0; padding-left:10px; font-size:13px; font-weight:700; color:#14171c;">Fast, modern rebuild</p>
+                    <p style="margin:0; padding-left:10px; font-size:12px; color:#8a8378; line-height:1.5;">Loads quickly, works on the first tap, mobile-first</p>
+                  </td>
+                  <td width="50%" valign="top" style="padding:0 0 12px 10px; border-left:2px solid #e8a33d;">
+                    <p style="margin:0 0 2px 0; padding-left:10px; font-size:13px; font-weight:700; color:#14171c;">Forms that actually work</p>
+                    <p style="margin:0; padding-left:10px; font-size:12px; color:#8a8378; line-height:1.5;">Every submission confirmed and routed somewhere real</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td width="50%" valign="top" style="padding:0 10px 0 0; border-left:2px solid #e8a33d;">
+                    <p style="margin:0 0 2px 0; padding-left:10px; font-size:13px; font-weight:700; color:#14171c;">Instant reply automation</p>
+                    <p style="margin:0; padding-left:10px; font-size:12px; color:#8a8378; line-height:1.5;">WhatsApp or chat that answers before a human can</p>
+                  </td>
+                  <td width="50%" valign="top" style="padding:0 0 0 10px; border-left:2px solid #e8a33d;">
+                    <p style="margin:0 0 2px 0; padding-left:10px; font-size:13px; font-weight:700; color:#14171c;">Booking &amp; lead capture</p>
+                    <p style="margin:0; padding-left:10px; font-size:12px; color:#8a8378; line-height:1.5;">Built in, not bolted on as an afterthought</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 22px 40px; background-color:#f7f6f4; border-top:1px solid #eceae6;">
+              <p style="margin:0; font-family: Menlo, Consolas, 'Courier New', monospace; font-size:11px; line-height:1.7; color:#9a9488;">
+                JR AI AGENCY · hello@jragency.tech<br>
+                Not the right time? Reply "no thanks" — I won't follow up again.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
 </body>
 </html>
 """
+
 
 
 @app.get("/")
@@ -226,6 +321,7 @@ async def upload_excel(file: UploadFile = File(...)):
             email = contact.get("email")
             name = contact.get("name", "Friend")
             company = contact.get("company", "your company")
+            website = contact.get("website")
 
             if not email:
                 failed_emails.append({
@@ -236,7 +332,7 @@ async def upload_excel(file: UploadFile = File(...)):
 
             subject = f"{company} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀"
 
-            body = generate_email_body(name, company)
+            body = generate_email_body(name, company, website)
 
             try:
                 print(f"📧 [{i}/{len(contacts)}] Sending to {email}")

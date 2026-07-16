@@ -37,8 +37,9 @@ def extract_emails_from_excel(file_bytes: bytes = None, filename: str = None, fi
         if not {"name", "email"}.issubset(df.columns):
             return {"error": "Excel must contain columns: Name and Email"}
 
-        # Determine if 'company' column exists
+        # Determine if 'company' and 'website' columns exist
         has_company = "company" in df.columns
+        has_website = "website" in df.columns
 
         # Drop empty email rows
         df = df.dropna(subset=["email"])
@@ -49,6 +50,7 @@ def extract_emails_from_excel(file_bytes: bytes = None, filename: str = None, fi
             name = str(row.get("name", "")).strip()
             email = str(row.get("email", "")).strip()
             company = str(row.get("company", "")).strip() if has_company else None
+            website = str(row.get("website", "")).strip() if has_website else None
 
             # Skip invalid entries
             if not email:
@@ -57,7 +59,8 @@ def extract_emails_from_excel(file_bytes: bytes = None, filename: str = None, fi
             contacts.append({
                 "name": name,
                 "email": email,
-                "company": company
+                "company": company,
+                "website": website
             })
 
         if not contacts:
