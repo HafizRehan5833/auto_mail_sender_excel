@@ -171,6 +171,7 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
               </p>
             </td>
           </tr>
+          
 
           <!-- CTA -->
           <tr>
@@ -282,8 +283,13 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
 @app.get("/")
 async def root():
     return {
-        "message": "📧 Welcome to JR Agency’s Email Sender API — offering website development and automation solutions. Upload your Excel file at /upload-excel/."
+        "message": "📧 Welcome to JR Agency's Email Sender API — offering website development and automation solutions. Upload your Excel file at /upload-excel/."
     }
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "online", "version": "2.3.0"}
+
 @app.post("/upload-excel/")
 async def upload_excel(file: UploadFile = File(...)):
     try:
@@ -348,7 +354,7 @@ async def upload_excel(file: UploadFile = File(...)):
                 sent_emails.append(email)
 
                 # Wait before sending next email
-                time.sleep(random.randint(30, 50))
+                time.sleep(random.randint(2, 5))
 
             except Exception as e:
                 print(f"❌ Failed to send to {email}: {e}")
@@ -367,9 +373,8 @@ async def upload_excel(file: UploadFile = File(...)):
         return {
             "status": "completed",
             "total_contacts": len(contacts),
-            "emails_sent": len(sent_emails),
-            "failed_count": len(failed_emails),
-            "failed_details": failed_emails,
+            "emails_sent": sent_emails,
+            "failed": failed_emails,
         }
 
     except HTTPException:
