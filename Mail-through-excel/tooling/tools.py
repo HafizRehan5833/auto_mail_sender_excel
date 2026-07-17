@@ -6,7 +6,7 @@ def extract_emails_from_excel(file_bytes: bytes = None, filename: str = None, fi
     """
     Extract Name, Email, and Company columns from an Excel or CSV file.
     Required columns: Name, Email
-    Optional column: Company
+    Optional columns: Company, Website (accepted as "website" or "website_url")
     Returns {"contacts": [...]} or {"error": "..."}
     """
     try:
@@ -32,6 +32,10 @@ def extract_emails_from_excel(file_bytes: bytes = None, filename: str = None, fi
 
         # Normalize columns to lowercase
         df.columns = [str(col).strip().lower() for col in df.columns]
+
+        # Accept "website_url" as an alias for "website"
+        if "website" not in df.columns and "website_url" in df.columns:
+            df = df.rename(columns={"website_url": "website"})
 
         # Check required columns
         if not {"name", "email"}.issubset(df.columns):

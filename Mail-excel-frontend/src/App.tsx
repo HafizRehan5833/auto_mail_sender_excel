@@ -3,8 +3,7 @@ import { Header } from './components/Header';
 import { FileUploader } from './components/FileUploader';
 import { StatusCard } from './components/StatusCard';
 import { AlertCircle, CheckCircle, Mail, Users } from 'lucide-react';
-
-const API_BASE = 'http://127.0.0.1:8000';
+import { API_BASE } from './config';
 
 interface UploadStats {
   totalEmails: number;
@@ -21,6 +20,7 @@ function App() {
     failedEmails: 0,
     totalUploads: 0,
   });
+  const [isResettingStats, setIsResettingStats] = useState(false);
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -76,6 +76,39 @@ function App() {
     setTimeout(() => setNotification(null), 5000);
   };
 
+  const handleResetStats = async () => {
+    const confirmed = window.confirm('Delete all saved stats? This cannot be undone.');
+    if (!confirmed) return;
+
+    setIsResettingStats(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/stats`, {
+        method: 'DELETE',
+        signal: AbortSignal.timeout(5000),
+      });
+
+      if (!res.ok) {
+        throw new Error('Failed to delete stats');
+      }
+
+      await fetchStats();
+      setNotification({
+        type: 'success',
+        message: 'Stats have been deleted successfully.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } catch {
+      setNotification({
+        type: 'error',
+        message: 'Could not delete stats. Please try again.'
+      });
+      setTimeout(() => setNotification(null), 5000);
+    } finally {
+      setIsResettingStats(false);
+    }
+  };
+
   const successRate = uploadStats.totalEmails > 0 
     ? Math.round((uploadStats.successfulEmails / uploadStats.totalEmails) * 100)
     : 0;
@@ -101,6 +134,21 @@ function App() {
       )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h2 className="text-2xl font-bold text-white">Dashboard Stats</h2>
+            <p className="text-sm text-gray-400 mt-1">View and manage the email campaign summary.</p>
+          </div>
+          <button
+            type="button"
+            onClick={handleResetStats}
+            disabled={isResettingStats}
+            className="inline-flex items-center justify-center rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isResettingStats ? 'Deleting...' : 'Delete Stats'}
+          </button>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatusCard

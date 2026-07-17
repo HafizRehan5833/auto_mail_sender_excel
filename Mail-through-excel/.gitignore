@@ -1,3 +1,4 @@
 .vercel
 .env
 email_stats.json
+.env*

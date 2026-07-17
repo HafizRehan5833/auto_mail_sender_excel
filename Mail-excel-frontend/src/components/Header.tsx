@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Sparkles } from 'lucide-react';
-
-const API_BASE = 'http://127.0.0.1:8000';
+import { API_BASE } from '../config';
 
 export const Header: React.FC = () => {
   const [isOnline, setIsOnline] = useState(false);

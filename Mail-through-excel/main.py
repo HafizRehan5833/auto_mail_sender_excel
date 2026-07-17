@@ -21,7 +21,7 @@ app = FastAPI(
 )
 
 # ── Persistent Stats Tracking ──────────────────────────────────────────────
-STATS_FILE = Path(__file__).parent / "email_stats.json"
+STATS_FILE = Path("/tmp/email_stats.json") if os.environ.get("VERCEL") else Path(__file__).parent / "email_stats.json"
 
 def _default_stats() -> dict:
     """Return the default (empty) stats structure."""
@@ -162,6 +162,18 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
             </td>
           </tr>
 
+          <!-- Intro (moved above checklist) -->
+          <tr>
+            <td class="mobile-padding" style="padding: 20px 40px 0 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
+              <p style="margin:0 0 12px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
+                Hi {first_name},
+              </p>
+              <p style="margin:0; font-size:15px; line-height:1.7; color:#3d3a35;">
+                I'm Rehan from JR AI Agency. We help small businesses fix one core problem:
+              </p>
+            </td>
+          </tr>
+
           <!-- Checklist: signature element -->
           <tr>
             <td class="mobile-padding" style="padding: 22px 40px 4px 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
@@ -218,12 +230,6 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
           <!-- Body -->
           <tr>
             <td class="mobile-padding" style="padding: 22px 40px 4px 40px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;">
-              <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
-                Hi {first_name},
-              </p>
-              <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
-                I'm Rehan from JR AI Agency. We help small businesses fix one core problem:
-              </p>
               <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
                 I checked your website and, unfortunately, it isn't working properly and the design feels outdated. If you'd like to build and update your website, just let us know — our agency will take care of it for you.
               </p>
@@ -471,7 +477,7 @@ async def upload_excel(file: UploadFile = File(...)):
                 sent_emails.append(email)
 
                 # Wait before sending next email
-                time.sleep(random.randint(2, 5))
+                time.sleep(random.randint(40, 60))
 
             except Exception as e:
                 print(f"❌ Failed to send to {email}: {e}")
