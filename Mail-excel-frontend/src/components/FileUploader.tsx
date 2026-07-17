@@ -17,7 +17,15 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onU
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [progressMessage, setProgressMessage] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+
+  const handleCancel = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+  };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -53,29 +61,87 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onU
 
     setIsUploading(true);
     setUploadResult(null);
+    setProgressMessage('');
 
     const formData = new FormData();
     formData.append('file', file);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const response = await fetch(`${API_BASE}/upload-excel/`, {
         method: 'POST',
         body: formData,
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || 'Upload failed');
       }
 
-      const result = await response.json();
-      setUploadResult(result);
-      onUploadSuccess(result);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Upload failed';
-      onUploadError(errorMessage);
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Response body is not readable');
+
+      const decoder = new TextDecoder();
+      let done = false;
+
+      let finalResult = null;
+      let currentEmailsSent: string[] = [];
+      let currentFailed: Array<{email: string; error: string}> = [];
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n').filter(Boolean);
+          for (const line of lines) {
+             try {
+               const data = JSON.parse(line);
+               if (data.type === 'progress') {
+                  setProgressMessage(`Sending to ${data.email} (${data.current}/${data.total})`);
+               } else if (data.type === 'success') {
+                  currentEmailsSent = [...currentEmailsSent, data.email];
+                  setUploadResult({ status: 'streaming', emails_sent: currentEmailsSent, failed: currentFailed });
+               } else if (data.type === 'error') {
+                  currentFailed = [...currentFailed, { email: data.email || 'Unknown', error: data.error }];
+                  setUploadResult({ status: 'streaming', emails_sent: currentEmailsSent, failed: currentFailed });
+               } else if (data.type === 'complete') {
+                  finalResult = data;
+                  setUploadResult(finalResult);
+               } else if (data.type === 'info') {
+                  setProgressMessage(data.message);
+               }
+             } catch (e) {
+               console.error("Error parsing NDJSON chunk", e);
+             }
+          }
+        }
+      }
+
+      if (finalResult) {
+        onUploadSuccess(finalResult);
+      } else if (currentEmailsSent.length > 0 || currentFailed.length > 0) {
+        onUploadSuccess({ status: 'completed', emails_sent: currentEmailsSent, failed: currentFailed });
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        onUploadError('Process stopped by user.');
+        // We can still trigger success for emails already sent
+        const partialSent = uploadResult?.emails_sent || [];
+        const partialFailed = uploadResult?.failed || [];
+        if (partialSent.length > 0 || partialFailed.length > 0) {
+           onUploadSuccess({ status: 'completed', emails_sent: partialSent, failed: partialFailed });
+        }
+      } else {
+        const errorMessage = error instanceof Error ? error.message : 'Upload failed';
+        onUploadError(errorMessage);
+      }
     } finally {
       setIsUploading(false);
+      setProgressMessage('');
     }
   };
 
@@ -109,7 +175,16 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onU
         
         <div className="flex flex-col items-center space-y-4">
           {isUploading ? (
-            <Loader2 className="w-12 h-12 text-blue-500 animate-spin" />
+            <div className="flex flex-col items-center pointer-events-auto">
+              <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); handleCancel(); }}
+                className="px-4 py-2 bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition-colors relative z-10 font-medium"
+              >
+                Stop Sending
+              </button>
+            </div>
           ) : (
             <div className="relative">
               <FileSpreadsheet className="w-12 h-12 text-blue-500" />
@@ -123,7 +198,7 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onU
             </h3>
             <p className="text-gray-400 mb-2">
               {isUploading 
-                ? 'Extracting contacts and sending emails...' 
+                ? (progressMessage || 'Extracting contacts and sending emails...') 
                 : 'Drag and drop your Excel file here, or click to browse'
               }
             </p>
@@ -137,8 +212,14 @@ export const FileUploader: React.FC<FileUploaderProps> = ({ onUploadSuccess, onU
       {uploadResult && (
         <div className="bg-gray-900 rounded-xl p-6 border border-gray-700 animate-fade-in">
           <div className="flex items-center space-x-2 mb-4">
-            <CheckCircle className="w-6 h-6 text-green-500" />
-            <h4 className="text-lg font-semibold text-white">Upload Complete</h4>
+            {uploadResult.status === 'streaming' ? (
+              <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
+            ) : (
+              <CheckCircle className="w-6 h-6 text-green-500" />
+            )}
+            <h4 className="text-lg font-semibold text-white">
+              {uploadResult.status === 'streaming' ? 'Sending Emails...' : 'Upload Complete'}
+            </h4>
           </div>
           
           <div className="space-y-4">

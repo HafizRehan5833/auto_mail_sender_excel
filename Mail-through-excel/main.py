@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import asyncio
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import time
@@ -439,81 +441,103 @@ async def upload_excel(file: UploadFile = File(...)):
         if not contacts:
             raise HTTPException(status_code=400, detail="No valid contacts found")
 
-        sent_emails = []
-        failed_emails = []
+        async def email_generator():
+            sent_emails = []
+            failed_emails = []
 
-        print(f"\n📤 Starting to send {len(contacts)} emails...\n")
-
-        # Loop through all contacts
-        for i, contact in enumerate(contacts, start=1):
-
-            email = contact.get("email")
-            name = contact.get("name", "Friend")
-            company = contact.get("company", "your company")
-            website = contact.get("website")
-
-            if not email:
-                failed_emails.append({
-                    "email": None,
-                    "error": "Missing email"
-                })
-                continue
-
-            subject = f"{company} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀"
-
-            body = generate_email_body(name, company, website)
+            print(f"\n📤 Starting to send {len(contacts)} emails...\n")
+            yield json.dumps({"type": "info", "message": f"Starting to send {len(contacts)} emails...", "total": len(contacts)}) + "\n"
 
             try:
-                print(f"📧 [{i}/{len(contacts)}] Sending to {email}")
+                # Loop through all contacts
+                for i, contact in enumerate(contacts, start=1):
 
-                send_email(
-                    email,
-                    subject,
-                    body
+                    email = contact.get("email")
+                name = contact.get("name", "Friend")
+                company = contact.get("company", "your company")
+                website = contact.get("website")
+
+                if not email:
+                    failed_emails.append({
+                        "email": None,
+                        "error": "Missing email"
+                    })
+                    yield json.dumps({"type": "error", "email": None, "error": "Missing email"}) + "\n"
+                    continue
+
+                subject = f"{company} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀"
+
+                body = generate_email_body(name, company, website)
+
+                try:
+                    print(f"📧 [{i}/{len(contacts)}] Sending to {email}")
+                    yield json.dumps({"type": "progress", "email": email, "status": "sending", "current": i, "total": len(contacts)}) + "\n"
+
+                    send_email(
+                        email,
+                        subject,
+                        body
+                    )
+
+                    print(f"✅ Successfully sent to {email}")
+
+                    sent_emails.append(email)
+                    yield json.dumps({"type": "success", "email": email, "current": i, "total": len(contacts)}) + "\n"
+
+                    # Wait before sending next email
+                    if i < len(contacts):
+                        await asyncio.sleep(random.randint(40, 60))
+
+                except Exception as e:
+                    print(f"❌ Failed to send to {email}: {e}")
+
+                    failed_emails.append({
+                        "email": email,
+                        "error": str(e)
+                    })
+                    yield json.dumps({"type": "error", "email": email, "error": str(e), "current": i, "total": len(contacts)}) + "\n"
+
+                print(
+                    f"\n✅ Completed!\n"
+                    f"Sent: {len(sent_emails)}\n"
+                    f"Failed: {len(failed_emails)}"
                 )
 
-                print(f"✅ Successfully sent to {email}")
+                # Persist stats to disk
+                updated_stats = record_upload(
+                    filename=file.filename or "unknown",
+                    sent=sent_emails,
+                    failed=failed_emails,
+                    total_contacts=len(contacts),
+                )
 
-                sent_emails.append(email)
+                yield json.dumps({
+                    "type": "complete",
+                    "status": "completed",
+                    "total_contacts": len(contacts),
+                    "emails_sent": sent_emails,
+                    "failed": failed_emails,
+                    "cumulative": {
+                        "total_sent": updated_stats["total_sent"],
+                        "total_failed": updated_stats["total_failed"],
+                        "success_rate": round(
+                            (updated_stats["total_sent"] / max(updated_stats["total_sent"] + updated_stats["total_failed"], 1)) * 100, 1
+                        ),
+                    },
+                }) + "\n"
+            
+            except asyncio.CancelledError:
+                print("\n🛑 Client disconnected, aborting email sending...")
+                if sent_emails or failed_emails:
+                    record_upload(
+                        filename=file.filename or "unknown",
+                        sent=sent_emails,
+                        failed=failed_emails,
+                        total_contacts=len(contacts),
+                    )
+                raise
 
-                # Wait before sending next email
-                time.sleep(random.randint(40, 60))
-
-            except Exception as e:
-                print(f"❌ Failed to send to {email}: {e}")
-
-                failed_emails.append({
-                    "email": email,
-                    "error": str(e)
-                })
-
-        print(
-            f"\n✅ Completed!\n"
-            f"Sent: {len(sent_emails)}\n"
-            f"Failed: {len(failed_emails)}"
-        )
-
-        # Persist stats to disk
-        updated_stats = record_upload(
-            filename=file.filename or "unknown",
-            sent=sent_emails,
-            failed=failed_emails,
-            total_contacts=len(contacts),
-        )
-
-        return {
-            "status": "completed",
-            "total_contacts": len(contacts),
-            "emails_sent": sent_emails,
-            "failed": failed_emails,
-            "cumulative": {
-                "total_sent": updated_stats["total_sent"],
-                "total_failed": updated_stats["total_failed"],
-                "success_rate": round(
-                    (updated_stats["total_sent"] / max(updated_stats["total_sent"] + updated_stats["total_failed"], 1)) * 100, 1
-                ),
-            },
-        }
+        return StreamingResponse(email_generator(), media_type="application/x-ndjson")
 
     except HTTPException:
         raise

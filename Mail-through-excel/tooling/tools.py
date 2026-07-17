@@ -33,13 +33,29 @@ def extract_emails_from_excel(file_bytes: bytes = None, filename: str = None, fi
         # Normalize columns to lowercase
         df.columns = [str(col).strip().lower() for col in df.columns]
 
-        # Accept "website_url" as an alias for "website"
-        if "website" not in df.columns and "website_url" in df.columns:
-            df = df.rename(columns={"website_url": "website"})
+        # Map alternate column names
+        rename_map = {}
+        if "company name" in df.columns and "company" not in df.columns:
+            rename_map["company name"] = "company"
+        if "web address" in df.columns and "website" not in df.columns:
+            rename_map["web address"] = "website"
+        elif "website_url" in df.columns and "website" not in df.columns:
+            rename_map["website_url"] = "website"
+            
+        if rename_map:
+            df = df.rename(columns=rename_map)
+
+        # Handle name combination if "name" is missing
+        if "name" not in df.columns:
+            if "first name" in df.columns and "last name" in df.columns:
+                df["name"] = df["first name"].astype(str).replace('nan', '') + " " + df["last name"].astype(str).replace('nan', '')
+                df["name"] = df["name"].str.strip()
+            elif "first name" in df.columns:
+                df["name"] = df["first name"].astype(str).replace('nan', '').str.strip()
 
         # Check required columns
         if not {"name", "email"}.issubset(df.columns):
-            return {"error": "Excel must contain columns: Name and Email"}
+            return {"error": "Excel must contain columns: Name (or First Name) and Email"}
 
         # Determine if 'company' and 'website' columns exist
         has_company = "company" in df.columns
