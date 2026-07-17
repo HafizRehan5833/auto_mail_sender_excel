@@ -1,4 +1,8 @@
 import random
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,10 +15,57 @@ from tooling.tools import extract_emails_from_excel
 app = FastAPI(
     title="Excel Email Sender API",
     description="API for sending personalized automation and web development offer emails from Excel files",
-    version="2.3.0",
+    version="2.4.0",
     docs_url="/docs",
     redoc_url="/redoc"
 )
+
+# ── Persistent Stats Tracking ──────────────────────────────────────────────
+STATS_FILE = Path(__file__).parent / "email_stats.json"
+
+def _default_stats() -> dict:
+    """Return the default (empty) stats structure."""
+    return {
+        "total_sent": 0,
+        "total_failed": 0,
+        "total_contacts": 0,
+        "uploads": []          # list of per-upload records
+    }
+
+def load_stats() -> dict:
+    """Load stats from the JSON file, or return defaults."""
+    if STATS_FILE.exists():
+        try:
+            return json.loads(STATS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return _default_stats()
+
+def save_stats(stats: dict) -> None:
+    """Persist stats to disk."""
+    STATS_FILE.write_text(json.dumps(stats, indent=2, default=str), encoding="utf-8")
+
+def record_upload(filename: str, sent: list[str], failed: list[dict[str, Any]], total_contacts: int) -> dict:
+    """
+    Record one upload run into the stats file and return the updated stats.
+    """
+    stats = load_stats()
+    stats["total_sent"] += len(sent)
+    stats["total_failed"] += len(failed)
+    stats["total_contacts"] += total_contacts
+
+    stats["uploads"].append({
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "filename": filename,
+        "contacts": total_contacts,
+        "sent": len(sent),
+        "failed": len(failed),
+        "sent_emails": sent,
+        "failed_emails": failed,
+    })
+
+    save_stats(stats)
+    return stats
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,7 +86,14 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
     """
     first_name = name.split()[0].capitalize() if name else "there"
     company_name = company or "your company"
-    website_url = website or "your site"
+    website_url = website.strip() if website else None
+
+    # Normalize: ensure the URL has a scheme
+    if website_url and not website_url.startswith(("http://", "https://")):
+        website_url = f"https://{website_url}"
+
+    # Display-friendly version (without scheme) for email copy
+    website_display = website_url.replace("https://", "").replace("http://", "") if website_url else None
 
     return f"""
 <!DOCTYPE html>
@@ -59,7 +117,7 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
 <body style="margin:0; padding:0; background-color:#eceae6;">
 
   <div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
-    Three 10-second checks on {website_url} — you might not like the answers.
+    Three 10-second checks on {website_display or 'your site'} — you might not like the answers.
   </div>
 
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#eceae6;">
@@ -96,7 +154,7 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
                 A 30-second check before the pitch
               </p>
               <p class="hero-title" style="margin:0; font-size:25px; line-height:1.32; font-weight:800; color:#14171c; letter-spacing:-0.3px;">
-                Don't take my word for it — open {website_url} on your phone right now.
+                Don't take my word for it — open {website_display or 'your site'} on your phone right now.
               </p>
               <p style="margin:14px 0 0 0; font-size:15px; line-height:1.65; color:#5b6472;">
                 Not on wifi, on data, the way most visitors actually find you. Three things to try, thirty seconds each:
@@ -166,19 +224,21 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
               <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
                 I'm Rehan from JR AI Agency. We help small businesses fix one core problem:
               </p>
+              <p style="margin:0 0 16px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
+                I checked your website and, unfortunately, it isn't working properly and the design feels outdated. If you'd like to build and update your website, just let us know — our agency will take care of it for you.
+              </p>
               <p style="margin:0 0 4px 0; font-size:15px; line-height:1.7; color:#3d3a35;">
                 Reply and tell me which of the three you actually noticed — I'll send back exactly what I'd fix first and roughly what it'd take, no pitch attached.
               </p>
             </td>
           </tr>
-          
 
           <!-- CTA -->
           <tr>
             <td class="mobile-padding" style="padding: 24px 40px 6px 40px;">
               <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
                 <tr>
-                  <td class="btn-cell" style="padding-right:10px;">
+                  <td class="btn-cell" style="padding-right:10px; padding-bottom:10px;">
                     <table role="presentation" cellpadding="0" cellspacing="0">
                       <tr>
                         <td align="center" bgcolor="#14171c" style="border-radius:2px;">
@@ -190,7 +250,7 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
                       </tr>
                     </table>
                   </td>
-                  <td class="btn-cell">
+                  <td class="btn-cell" style="padding-bottom:10px;">
                     <table role="presentation" cellpadding="0" cellspacing="0">
                       <tr>
                         <td align="center" bgcolor="#ffffff" style="border-radius:2px; border:1px solid #14171c;">
@@ -203,6 +263,22 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
                     </table>
                   </td>
                 </tr>
+                {f'''
+                <tr>
+                  <td class="btn-cell" colspan="2">
+                    <table role="presentation" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td align="center" bgcolor="#f7f6f4" style="border-radius:2px; border:1px solid #dcd9d3;">
+                          <a href="{website_url}"
+                             style="display:inline-block; padding:13px 24px; font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; font-size:14px; font-weight:700; color:#14171c; text-decoration:none; border-radius:2px;">
+                            Your Website
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                ''' if website_url else ''}
               </table>
             </td>
           </tr>
@@ -288,7 +364,48 @@ async def root():
 
 @app.get("/api/health")
 async def health_check():
-    return {"status": "online", "version": "2.3.0"}
+    return {"status": "online", "version": "2.4.0"}
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """
+    Return cumulative email-sending statistics.
+
+    Response shape:
+    {
+        "total_sent":      int,
+        "total_failed":    int,
+        "total_contacts":  int,
+        "success_rate":    float   (0-100, rounded to 1 decimal),
+        "total_uploads":   int,
+        "uploads":         [ ... ] (most-recent first, last 50)
+    }
+    """
+    stats = load_stats()
+
+    total = stats["total_sent"] + stats["total_failed"]
+    success_rate = round((stats["total_sent"] / total) * 100, 1) if total > 0 else 0.0
+
+    # Return uploads newest-first, cap at 50 to keep the response lean
+    recent_uploads = list(reversed(stats.get("uploads", [])))[:50]
+
+    return {
+        "total_sent": stats["total_sent"],
+        "total_failed": stats["total_failed"],
+        "total_contacts": stats["total_contacts"],
+        "success_rate": success_rate,
+        "total_uploads": len(stats.get("uploads", [])),
+        "uploads": recent_uploads,
+    }
+
+
+@app.delete("/api/stats")
+async def reset_stats():
+    """Reset all email statistics."""
+    stats = _default_stats()
+    save_stats(stats)
+    return {"status": "reset", "message": "All statistics have been cleared."}
 
 @app.post("/upload-excel/")
 async def upload_excel(file: UploadFile = File(...)):
@@ -370,11 +487,26 @@ async def upload_excel(file: UploadFile = File(...)):
             f"Failed: {len(failed_emails)}"
         )
 
+        # Persist stats to disk
+        updated_stats = record_upload(
+            filename=file.filename or "unknown",
+            sent=sent_emails,
+            failed=failed_emails,
+            total_contacts=len(contacts),
+        )
+
         return {
             "status": "completed",
             "total_contacts": len(contacts),
             "emails_sent": sent_emails,
             "failed": failed_emails,
+            "cumulative": {
+                "total_sent": updated_stats["total_sent"],
+                "total_failed": updated_stats["total_failed"],
+                "success_rate": round(
+                    (updated_stats["total_sent"] / max(updated_stats["total_sent"] + updated_stats["total_failed"], 1)) * 100, 1
+                ),
+            },
         }
 
     except HTTPException:

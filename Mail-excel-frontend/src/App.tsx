@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Header } from './components/Header';
 import { FileUploader } from './components/FileUploader';
 import { StatusCard } from './components/StatusCard';
 import { AlertCircle, CheckCircle, Mail, Users } from 'lucide-react';
 
+const API_BASE = 'http://127.0.0.1:8000';
+
 interface UploadStats {
   totalEmails: number;
   successfulEmails: number;
   failedEmails: number;
+  totalUploads: number;
   lastUpload?: Date;
 }
 
@@ -15,22 +18,45 @@ function App() {
   const [uploadStats, setUploadStats] = useState<UploadStats>({
     totalEmails: 0,
     successfulEmails: 0,
-    failedEmails: 0
+    failedEmails: 0,
+    totalUploads: 0,
   });
   const [notification, setNotification] = useState<{
     type: 'success' | 'error';
     message: string;
   } | null>(null);
 
+  // Fetch cumulative stats from backend
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/stats`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setUploadStats({
+        totalEmails: data.total_sent + data.total_failed,
+        successfulEmails: data.total_sent,
+        failedEmails: data.total_failed,
+        totalUploads: data.total_uploads,
+        lastUpload: data.uploads?.[0]?.timestamp
+          ? new Date(data.uploads[0].timestamp)
+          : undefined,
+      });
+    } catch {
+      // Backend may be offline — keep whatever we have
+    }
+  }, []);
+
+  // Load stats on mount
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
   const handleUploadSuccess = (result: any) => {
-    const newStats = {
-      totalEmails: result.emails_sent.length + result.failed.length,
-      successfulEmails: result.emails_sent.length,
-      failedEmails: result.failed.length,
-      lastUpload: new Date()
-    };
-    setUploadStats(newStats);
-    
+    // Re-fetch cumulative stats from backend so numbers stay in sync
+    fetchStats();
+
     setNotification({
       type: 'success',
       message: `Successfully sent ${result.emails_sent.length} emails!`
