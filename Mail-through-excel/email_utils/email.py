@@ -46,6 +46,13 @@ Please open it in an HTML-compatible email client.
 
         print(f"✅ Email sent to {to_addr}")
 
+    except smtplib.SMTPRecipientsRefused:
+        print(f"❌ Failed sending email to {to_addr}: Address Not Found")
+        raise Exception("Address Not Found")
+    except smtplib.SMTPResponseException as e:
+        error_msg = f"SMTP Error {e.smtp_code}: {e.smtp_error.decode('utf-8', errors='ignore')}"
+        print(f"❌ Failed sending email to {to_addr}: {error_msg}")
+        raise Exception(error_msg)
     except Exception as e:
-        print(f"❌ Failed sending email to {to_addr}")
-        raise Exception(str(e))
+        print(f"❌ Failed sending email to {to_addr}: {str(e)}")
+        raise Exception(f"Connection/Authentication Error: {str(e)}")

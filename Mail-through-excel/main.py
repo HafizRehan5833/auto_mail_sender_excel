@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 import os
 import time
+from email_validator import validate_email, EmailNotValidError
 
 from email_utils.email import send_email
 from tooling.tools import extract_emails_from_excel
@@ -444,58 +445,103 @@ async def upload_excel(file: UploadFile = File(...)):
         async def email_generator():
             sent_emails = []
             failed_emails = []
+            
+            total_contacts = len(contacts)
+            start_time = datetime.now(timezone.utc)
 
-            print(f"\n📤 Starting to send {len(contacts)} emails...\n")
-            yield json.dumps({"type": "info", "message": f"Starting to send {len(contacts)} emails...", "total": len(contacts)}) + "\n"
+            print(f"\n📤 Starting to send {total_contacts} emails...\n")
+            yield json.dumps({"type": "info", "message": f"Starting to send {total_contacts} emails...", "total": total_contacts}) + "\n"
 
             try:
                 # Loop through all contacts
                 for i, contact in enumerate(contacts, start=1):
 
                     email = contact.get("email")
-                name = contact.get("name", "Friend")
-                company = contact.get("company", "your company")
-                website = contact.get("website")
+                    name = contact.get("name", "Friend")
+                    company = contact.get("company", "your company")
+                    website = contact.get("website")
+                    
+                    elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
+                    speed = i / elapsed if elapsed > 0 else 0
+                    eta = (total_contacts - i) / speed if speed > 0 else 0
+                    
+                    # Common progress info
+                    progress_info = {
+                        "current": i,
+                        "total": total_contacts,
+                        "elapsed": elapsed,
+                        "speed": speed,
+                        "eta": eta
+                    }
 
-                if not email:
-                    failed_emails.append({
-                        "email": None,
-                        "error": "Missing email"
-                    })
-                    yield json.dumps({"type": "error", "email": None, "error": "Missing email"}) + "\n"
-                    continue
+                    if not email:
+                        err_info = {
+                            "email": None,
+                            "error": "Missing email",
+                            "reason": "Missing email",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                        failed_emails.append(err_info)
+                        yield json.dumps({"type": "error", **err_info, **progress_info}) + "\n"
+                        continue
 
-                subject = f"{company} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀"
+                    # Validate email syntax early
+                    try:
+                        valid = validate_email(email, check_deliverability=False)
+                        email = valid.normalized
+                    except EmailNotValidError as e:
+                        err_info = {
+                            "email": email,
+                            "error": str(e),
+                            "reason": "Invalid Email Format",
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                        failed_emails.append(err_info)
+                        yield json.dumps({"type": "error", **err_info, **progress_info}) + "\n"
+                        continue
 
-                body = generate_email_body(name, company, website)
+                    subject = f"{company} | Save 40+ Hours Monthly & Attract Clients Automatically 🚀"
 
-                try:
-                    print(f"📧 [{i}/{len(contacts)}] Sending to {email}")
-                    yield json.dumps({"type": "progress", "email": email, "status": "sending", "current": i, "total": len(contacts)}) + "\n"
+                    body = generate_email_body(name, company, website)
 
-                    send_email(
-                        email,
-                        subject,
-                        body
-                    )
+                    try:
+                        print(f"📧 [{i}/{total_contacts}] Sending to {email}")
+                        yield json.dumps({"type": "progress", "email": email, "status": "sending", **progress_info}) + "\n"
 
-                    print(f"✅ Successfully sent to {email}")
+                        send_email(
+                            email,
+                            subject,
+                            body
+                        )
 
-                    sent_emails.append(email)
-                    yield json.dumps({"type": "success", "email": email, "current": i, "total": len(contacts)}) + "\n"
+                        print(f"✅ Successfully sent to {email}")
 
-                    # Wait before sending next email
-                    if i < len(contacts):
-                        await asyncio.sleep(random.randint(40, 60))
+                        sent_emails.append(email)
+                        yield json.dumps({"type": "success", "email": email, "timestamp": datetime.now(timezone.utc).isoformat(), **progress_info}) + "\n"
 
-                except Exception as e:
-                    print(f"❌ Failed to send to {email}: {e}")
+                        # Wait before sending next email
+                        if i < total_contacts:
+                            await asyncio.sleep(random.randint(40, 60))
 
-                    failed_emails.append({
-                        "email": email,
-                        "error": str(e)
-                    })
-                    yield json.dumps({"type": "error", "email": email, "error": str(e), "current": i, "total": len(contacts)}) + "\n"
+                    except Exception as e:
+                        print(f"❌ Failed to send to {email}: {e}")
+                        
+                        reason = "SMTP Error"
+                        if "Address Not Found" in str(e):
+                            reason = "Address Not Found"
+                        elif "Connection" in str(e):
+                            reason = "Connection Timeout"
+                        elif "Authentication" in str(e):
+                            reason = "SMTP Authentication Error"
+
+                        err_info = {
+                            "email": email,
+                            "error": str(e),
+                            "reason": reason,
+                            "timestamp": datetime.now(timezone.utc).isoformat()
+                        }
+                        failed_emails.append(err_info)
+                        yield json.dumps({"type": "error", **err_info, **progress_info}) + "\n"
 
                 print(
                     f"\n✅ Completed!\n"
@@ -508,13 +554,13 @@ async def upload_excel(file: UploadFile = File(...)):
                     filename=file.filename or "unknown",
                     sent=sent_emails,
                     failed=failed_emails,
-                    total_contacts=len(contacts),
+                    total_contacts=total_contacts,
                 )
 
                 yield json.dumps({
                     "type": "complete",
                     "status": "completed",
-                    "total_contacts": len(contacts),
+                    "total_contacts": total_contacts,
                     "emails_sent": sent_emails,
                     "failed": failed_emails,
                     "cumulative": {
