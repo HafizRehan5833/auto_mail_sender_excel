@@ -78,7 +78,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
+MAX_FILE_SIZE = 50 * 1024 * 1024 
 WHATSAPP_NUMBER = "923019201234"
 
 
@@ -91,11 +91,10 @@ def generate_email_body(name: str, company: str, website: str = None) -> str:
     company_name = company or "your company"
     website_url = website.strip() if website else None
 
-    # Normalize: ensure the URL has a scheme
     if website_url and not website_url.startswith(("http://", "https://")):
         website_url = f"https://{website_url}"
 
-    # Display-friendly version (without scheme) for email copy
+    
     website_display = website_url.replace("https://", "").replace("http://", "") if website_url else None
 
     return f"""
@@ -396,7 +395,6 @@ async def get_stats():
     total = stats["total_sent"] + stats["total_failed"]
     success_rate = round((stats["total_sent"] / total) * 100, 1) if total > 0 else 0.0
 
-    # Return uploads newest-first, cap at 50 to keep the response lean
     recent_uploads = list(reversed(stats.get("uploads", [])))[:50]
 
     return {
@@ -419,7 +417,7 @@ async def reset_stats():
 @app.post("/upload-excel/")
 async def upload_excel(file: UploadFile = File(...)):
     try:
-        # Read uploaded file
+      
         contents = await file.read()
 
         if not contents:
@@ -428,7 +426,6 @@ async def upload_excel(file: UploadFile = File(...)):
         if len(contents) > MAX_FILE_SIZE:
             raise HTTPException(status_code=413, detail="File too large")
 
-        # Extract contacts
         result = extract_emails_from_excel(
             file_bytes=contents,
             filename=file.filename
